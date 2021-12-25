@@ -26,3 +26,5 @@ checkpoint*
 tmp*
 lightning_logs
 adult.data
+
+exp_data/

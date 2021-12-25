@@ -2,7 +2,7 @@ import argparse
 
 import networkx as nx
 import pytorch_lightning as pl
-from utils import gen_data_nonlinear
+from utils import gen_data_nonlinear, load_adult
 
 from decaf import DECAF
 from decaf.data import DataModule
@@ -41,14 +41,17 @@ if __name__ == "__main__":
 
     # DATA SETUP according to dag_seed
     G = nx.DiGraph(dag_seed)
-    data = gen_data_nonlinear(G, SIZE=2000)
+    data = gen_data_nonlinear(G, SIZE=1000)
     dm = DataModule(data.values)
+
+    #data = load_adult()
+    #dm = DataModule(data)
+
+    print(data)    
     data_tensor = dm.dataset.x
 
     # sample default hyperparameters
-    x_dim = dm.dims[0]
-    z_dim = x_dim  # noise dimension for generator input. For the causal system, this should be equal to x_dim
-    lambda_privacy = 0  # privacy used for ADS-GAN, not sure if necessary for us tbh
+    lambda_privacy = 0.0  # privacy used for ADS-GAN, not sure if necessary for us tbh
     lambda_gp = 10  # gradient penalisation used in WGAN-GP
     l1_g = 0  # l1 reg on sum of all parameters in generator
     weight_decay = 1e-2  # used by AdamW to regularise all network weights. Similar to L2 but for momentum-based optimization
@@ -89,6 +92,7 @@ if __name__ == "__main__":
         callbacks=[],
     )
     trainer.fit(model, dm)
+    print('data_tensor', data_tensor.shape)
     synth_data = (
         model.gen_synthetic(
             data_tensor, gen_order=model.get_gen_order(), biased_edges=bias_dict
@@ -96,4 +100,5 @@ if __name__ == "__main__":
         .detach()
         .numpy()
     )
+    print(synth_data)
     print("Data generated successfully!")

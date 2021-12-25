@@ -59,8 +59,8 @@ class Generator_causal(nn.Module):
         if use_mask:
 
             if len(dag_seed) > 0:
-                M_init = torch.rand(x_dim, x_dim) * 0.0
-                M_init[torch.eye(x_dim, dtype=bool)] = 0
+                #M_init = torch.rand(x_dim, x_dim) * 0.0
+                #M_init[torch.eye(x_dim, dtype=bool)] = 0
                 M_init = torch.rand(x_dim, x_dim) * 0.0
                 for pair in dag_seed:
                     M_init[pair[0], pair[1]] = 1
@@ -73,6 +73,7 @@ class Generator_causal(nn.Module):
                 self.M = torch.nn.parameter.Parameter(M_init)
         else:
             self.M = torch.ones(x_dim, x_dim)
+
         self.fc_i = nn.ModuleList(
             [nn.Linear(x_dim + 1, h_dim) for i in range(self.x_dim)]
         )
@@ -145,17 +146,17 @@ class DECAF(pl.LightningModule):
         input_dim: int,
         dag_seed: list = [],
         h_dim: int = 200,
-        lr: float = 1e-3,
-        b1: float = 0.5,
-        b2: float = 0.999,
-        batch_size: int = 32,
-        lambda_gp: float = 10,
-        lambda_privacy: float = 1,
+        lr: float = 1e-3, # optimizer
+        b1: float = 0.5, # optimizer
+        b2: float = 0.999, # optimizer
+        batch_size: int = 32, # doing nothing?
+        lambda_gp: float = 10, # gradient penalty for discriminator (WGAN GP)
+        lambda_privacy: float = 1, # privacy param = 0
         d_updates: int = 5,
         eps: float = 1e-8,
         alpha: float = 1,
         rho: float = 1,
-        weight_decay: float = 1e-2,
+        weight_decay: float = 1e-2, # optimizer
         grad_dag_loss: bool = False,
         l1_g: float = 0,
         l1_W: float = 1,
@@ -191,34 +192,34 @@ class DECAF(pl.LightningModule):
     def forward(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
         return self.generator(x, z)
 
-    def gradient_dag_loss(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
-        """
-        Calculates the gradient of the output wrt the input. This is a better way to compute the DAG loss,
-        but fairly slow atm
-        """
-        x.requires_grad = True
-        z.requires_grad = True
-        gen_x = self.generator(x, z)
-        dummy = torch.ones(x.size(0))
-        dummy = dummy.type_as(x)
+    # def gradient_dag_loss(self, x: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+    #     """
+    #     Calculates the gradient of the output wrt the input. This is a better way to compute the DAG loss,
+    #     but fairly slow atm
+    #     """
+    #     x.requires_grad = True
+    #     z.requires_grad = True
+    #     gen_x = self.generator(x, z)
+    #     dummy = torch.ones(x.size(0))
+    #     dummy = dummy.type_as(x)
 
-        W = torch.zeros(x.shape[1], x.shape[1])
-        W = W.type_as(x)
+    #     W = torch.zeros(x.shape[1], x.shape[1])
+    #     W = W.type_as(x)
 
-        for i in range(x.shape[1]):
-            gradients = torch.autograd.grad(
-                outputs=gen_x[:, i],
-                inputs=x,
-                grad_outputs=dummy,
-                create_graph=True,
-                retain_graph=True,
-                only_inputs=True,
-            )[0]
-            W[i] = torch.sum(torch.abs(gradients), axis=0)
+    #     for i in range(x.shape[1]):
+    #         gradients = torch.autograd.grad(
+    #             outputs=gen_x[:, i],
+    #             inputs=x,
+    #             grad_outputs=dummy,
+    #             create_graph=True,
+    #             retain_graph=True,
+    #             only_inputs=True,
+    #         )[0]
+    #         W[i] = torch.sum(torch.abs(gradients), axis=0)
 
-        h = trace_expm(W ** 2) - self.hparams.x_dim
+    #     h = trace_expm(W ** 2) - self.hparams.x_dim
 
-        return 0.5 * self.hparams.rho * h * h + self.hparams.alpha * h
+    #     return 0.5 * self.hparams.rho * h * h + self.hparams.alpha * h
 
     def compute_gradient_penalty(
         self, real_samples: torch.Tensor, fake_samples: torch.Tensor
@@ -248,15 +249,15 @@ class DECAF(pl.LightningModule):
         gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
         return gradient_penalty
 
-    def privacy_loss(
-        self, real_samples: torch.Tensor, fake_samples: torch.Tensor
-    ) -> torch.Tensor:
-        return -torch.mean(
-            torch.sqrt(
-                torch.mean((real_samples - fake_samples) ** 2, axis=1)
-                + self.hparams.eps
-            )
-        )
+    # def privacy_loss(
+    #     self, real_samples: torch.Tensor, fake_samples: torch.Tensor
+    # ) -> torch.Tensor:
+    #     return -torch.mean(
+    #         torch.sqrt(
+    #             torch.mean((real_samples - fake_samples) ** 2, axis=1)
+    #             + self.hparams.eps
+    #         )
+    #     )
 
     def get_W(self) -> torch.Tensor:
         if self.hparams.use_mask:
@@ -275,15 +276,15 @@ class DECAF(pl.LightningModule):
                 )
             return torch.cat(W_0, axis=0).T
 
-    def dag_loss(self) -> torch.Tensor:
-        W = self.get_W()
-        h = trace_expm(W ** 2) - self.x_dim
-        l1_loss = torch.norm(W, 1)
-        return (
-            0.5 * self.hparams.rho * h ** 2
-            + self.hparams.alpha * h
-            + self.hparams.l1_W * l1_loss
-        )
+    # def dag_loss(self) -> torch.Tensor:
+    #     W = self.get_W()
+    #     h = trace_expm(W ** 2) - self.x_dim
+    #     l1_loss = torch.norm(W, 1)
+    #     return (
+    #         0.5 * self.hparams.rho * h ** 2
+    #         + self.hparams.alpha * h
+    #         + self.hparams.l1_W * l1_loss
+    #     )
 
     def sample_z(self, n: int) -> torch.Tensor:
         return torch.rand(n, self.z_dim) * 2 - 1
@@ -309,13 +310,13 @@ class DECAF(pl.LightningModule):
     def get_dag(self) -> np.ndarray:
         return np.round(self.get_W().detach().numpy(), 3)
 
-    def get_bi_dag(self) -> np.ndarray:
-        dag = np.round(self.get_W().detach().numpy(), 3)
-        bi_dag = np.zeros_like(dag)
-        for i in range(len(dag)):
-            for j in range(i, len(dag)):
-                bi_dag[i][j] = dag[i][j] + dag[j][i]
-        return np.round(bi_dag, 3)
+    # def get_bi_dag(self) -> np.ndarray:
+    #     dag = np.round(self.get_W().detach().numpy(), 3)
+    #     bi_dag = np.zeros_like(dag)
+    #     for i in range(len(dag)):
+    #         for j in range(i, len(dag)):
+    #             bi_dag[i][j] = dag[i][j] + dag[j][i]
+    #     return np.round(bi_dag, 3)
 
     def get_gen_order(self) -> list:
         dense_dag = np.array(self.get_dag())
@@ -370,16 +371,16 @@ class DECAF(pl.LightningModule):
             )  # self.adversarial_loss(self.discriminator(self.generated_batch), valid)
 
             # add privacy loss of ADS-GAN
-            g_loss += self.hparams.lambda_privacy * self.privacy_loss(
-                batch, generated_batch
-            )
+            # g_loss += self.hparams.lambda_privacy * self.privacy_loss(
+            #    batch, generated_batch
+            # )
 
             # add l1 regularization loss
             g_loss += self.hparams.l1_g * self.l1_reg(self.generator)
 
-            if len(self.dag_seed) == 0:
-                if self.hparams.grad_dag_loss:
-                    g_loss += self.gradient_dag_loss(batch, z)
+            # if len(self.dag_seed) == 0:
+            #    if self.hparams.grad_dag_loss:
+            #        g_loss += self.gradient_dag_loss(batch, z)
 
             tqdm_dict = {"g_loss": g_loss.detach()}
 

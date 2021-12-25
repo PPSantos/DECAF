@@ -1,8 +1,59 @@
 from typing import Any, Tuple
 
+import random
 import networkx as nx
 import numpy as np
 import pandas as pd
+
+
+def gen_door_env_data(N, policy_eps) -> pd.DataFrame:
+
+    d = []
+    for _ in range(N):
+
+        # Sample state.
+        s_type = np.random.choice([0,1], p=[0.6,0.4])
+        if s_type == 0:
+            s_t = np.random.uniform()
+        else:
+            s_t = np.random.uniform() - 1
+
+        # Sample action.
+        a_t = np.random.choice([0,1])
+
+        # if s_t <= 0.0:
+        #     a_t = np.random.choice([0,1], p=[0.4,0.6])
+        # else:
+        #     a_t = np.random.choice([0,1], p=[0.9,0.1])
+
+        # if s_t <= 0.0:
+        #     a_t = 1
+        # else:
+        #     a_t = 0
+        # if random.uniform(0,1) < policy_eps:
+        #     a_t = np.random.randint(2)
+
+        # Sample reward.
+        if s_t <= 0.0 and a_t == 0:
+            r_mean = -0.5
+        elif s_t <= 0.0 and a_t == 1:
+            r_mean = 0.5
+        elif s_t > 0.0 and a_t == 0:
+            r_mean = 0.5
+        elif s_t > 0.0 and a_t == 1:
+            r_mean = -0.5
+        else:
+            raise ValueError('Error generating dataset.')
+        r_t = np.random.normal(loc=r_mean, scale=0.1)
+
+        # One-hot encode action.
+        one_hot = np.zeros(2) # num actions = 2
+        one_hot[a_t] = 1
+        a_t = list(one_hot)
+
+        d.append([s_t] + a_t + [r_t])
+
+    return pd.DataFrame(d) #, columns=list(map(str, [0,1,2,3])))
 
 
 # It will apply a perturbation at each node provided in perturb.
@@ -188,7 +239,9 @@ def load_adult() -> Tuple[pd.DataFrame, pd.DataFrame]:
         df = df.replace(row, range(len(row)))
 
     df = df.values
-    X = df[:, :14].astype(np.uint32)
-    y = df[:, 14].astype(np.uint8)
 
-    return X, y
+    return df.astype(np.uint32)
+
+    #X = df[:, :14].astype(np.uint32)
+    #y = df[:, 14].astype(np.uint8)
+    #return X, y
