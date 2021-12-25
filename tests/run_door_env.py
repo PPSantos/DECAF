@@ -1,8 +1,11 @@
 import os
+import json
+import time
 import pathlib
 import argparse
 import numpy as np
 import pandas as pd
+import multiprocessing as mp
 from datetime import datetime
 
 import pytorch_lightning as pl
@@ -11,12 +14,17 @@ from utils import gen_door_env_data
 from learning import GAN
 from learning.data import DataModule
 
+NUM_RUNS = 3
+NUM_PROCESSORS = 3
 DATA_FOLDER_PATH = str(pathlib.Path(__file__).parent.absolute()) + '/exp_data/'
+
 
 def create_exp_name():
     return 'door_env_' + str(datetime.today().strftime('%Y-%m-%d-%H-%M-%S'))
 
-if __name__ == "__main__":
+def main(time_delay):
+
+    time.sleep(time_delay)
 
     # Setup experiment data folder.
     exp_name = create_exp_name()
@@ -115,29 +123,31 @@ if __name__ == "__main__":
         .detach()
         .numpy()
     )
-    print('Synthesized data:')
+    print('Debiased synthesized data:')
     print(synth_data)
 
     # Store synthesized data.
     df = pd.DataFrame.from_records(synth_data)
-    df.to_csv(exp_path + '/synthesized_data.csv')
+    df.to_csv(exp_path + '/debiased_synthesized_data.csv')
 
     synth_data = df.copy()
     one_hot_actions = synth_data.iloc[:, 1:3]
     one_hot_actions.columns = [0,1]
     synth_data['action'] = (one_hot_actions.iloc[:, 0:2] == 1).idxmax(1)
     synth_data['state'] = (synth_data.iloc[:,0] > 0).astype(int)
-    print(synth_data)
 
     # Calculate P(S).
-    print('P(s):')
     P_s = synth_data['state'].value_counts() / len(synth_data['state'].index)
     print(P_s)
+    P_s0 = P_s.loc[0]
+    P_s1 = P_s.loc[1]
 
     # Calculate E[R|A].
     print('E[R|A]:')
     E_per_A = synth_data.groupby(['action']).mean()
     print(E_per_A)
+    E_a0 = E_per_A.loc[0][3]
+    E_a1 = E_per_A.loc[1][3]
 
     # Calculate E[R|do(A)] = E[E_S[R|S,A]].
     print('E[R|do(A)] = E[E_S[R|S,A]]:')
@@ -147,6 +157,9 @@ if __name__ == "__main__":
     E_do_A1 = E_per_SA.loc[(0,1)][3]*P_s[0] + E_per_SA.loc[(1,1)][3]*P_s[1]
     print(E_do_A0)
     print(E_do_A1)
+
+    exp_data_debiased = {'P_s0': P_s0, 'P_s1': P_s1, 'E_a0': E_a0,
+                'E_a1': E_a1, 'E_do_A0': E_do_A0, 'E_do_A1': E_do_A1}
 
     print('-'*20)
     print('Debiasing=Off')
@@ -158,12 +171,12 @@ if __name__ == "__main__":
         .detach()
         .numpy()
     )
-    print('Synthesized data:')
+    print('Biased synthesized data:')
     print(synth_data)
 
     # Store synthesized data.
     df = pd.DataFrame.from_records(synth_data)
-    df.to_csv(exp_path + '/synthesized_data.csv')
+    df.to_csv(exp_path + '/biased_synthesized_data.csv')
 
     synth_data = df.copy()
     one_hot_actions = synth_data.iloc[:, 1:3]
@@ -176,11 +189,15 @@ if __name__ == "__main__":
     print('P(s):')
     P_s = synth_data['state'].value_counts() / len(synth_data['state'].index)
     print(P_s)
+    P_s0 = P_s.loc[0]
+    P_s1 = P_s.loc[1]
 
     # Calculate E[R|A].
     print('E[R|A]:')
     E_per_A = synth_data.groupby(['action']).mean()
     print(E_per_A)
+    E_a0 = E_per_A.loc[0][3]
+    E_a1 = E_per_A.loc[1][3]
 
     # Calculate E[R|do(A)] = E[E_S[R|S,A]].
     print('E[R|do(A)] = E[E_S[R|S,A]]:')
@@ -190,3 +207,42 @@ if __name__ == "__main__":
     E_do_A1 = E_per_SA.loc[(0,1)][3]*P_s[0] + E_per_SA.loc[(1,1)][3]*P_s[1]
     print(E_do_A0)
     print(E_do_A1)
+
+    exp_data_biased = {'P_s0': P_s0, 'P_s1': P_s1, 'E_a0': E_a0,
+                'E_a1': E_a1, 'E_do_A0': E_do_A0, 'E_do_A1': E_do_A1}
+
+    return {'exp_name': exp_name, 'exp_data_biased': exp_data_biased,
+            'exp_data_debiased': exp_data_debiased}
+
+if __name__ == "__main__":
+
+    # Setup experiment data folder.
+    exp_name = 'MAIN_' + create_exp_name()
+    exp_path = DATA_FOLDER_PATH + exp_name
+    os.makedirs(exp_path, exist_ok=True)
+    print('\nExperiment ID (MAIN):', exp_name)
+
+    with mp.Pool(processes=NUM_PROCESSORS) as pool:
+        data = pool.map(main, [(2*t) for t in range(NUM_RUNS)])
+        pool.close()
+        pool.join()
+    
+    print(data)
+
+    # Store train log data.
+    f = open(exp_path + "/train_data.json", "w")
+    dumped = json.dumps(data) #, cls=NumpyEncoder)
+    json.dump(dumped, f)
+    f.close()
+
+    print('\nExperiment ID (MAIN):', exp_name)
+
+    print('\nData biased:')
+    data_biased = pd.DataFrame([run['exp_data_biased'] for run in data])
+    print(data_biased)
+    print(data_biased.mean())
+
+    print('\nData debiased:')
+    data_debiased = pd.DataFrame([run['exp_data_debiased'] for run in data])
+    print(data_debiased)
+    print(data_debiased.mean())
