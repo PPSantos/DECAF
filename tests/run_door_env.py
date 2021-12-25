@@ -25,6 +25,7 @@ def create_exp_name():
 def main(time_delay):
 
     time.sleep(time_delay)
+    np.random.seed(time_delay)
 
     # Setup experiment data folder.
     exp_name = create_exp_name()
