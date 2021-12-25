@@ -30,7 +30,7 @@ class DataModule(pl.LightningDataModule):
         data: list,
         data_dir: Path = Path.cwd(),
         batch_size: int = 64,
-        num_workers: int = 0,
+        num_workers: int = 8,
     ) -> None:
         super().__init__()
         self.data_dir = data_dir
