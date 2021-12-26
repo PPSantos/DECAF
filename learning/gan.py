@@ -67,13 +67,13 @@ class Generator_causal(nn.Module):
         self.M = torch.nn.parameter.Parameter(M_init, requires_grad=False)
         print("Initialised adjacency matrix as parsed:\n", self.M)
 
-        # def block(in_feat: int, out_feat: int, normalize: bool = False) -> list:
-        #     layers = [nn.Linear(in_feat, out_feat)]
-        #     if normalize:
-        #         layers.append(nn.BatchNorm1d(out_feat, 0.8))
-        #     layers.append(activation_layer)
-        #     return layers
-        # self.shared = nn.Sequential(*block(h_dim, h_dim), *block(h_dim, h_dim))
+        def block(in_feat: int, out_feat: int, normalize: bool = False) -> list:
+            layers = [nn.Linear(in_feat, out_feat)]
+            if normalize:
+                layers.append(nn.BatchNorm1d(out_feat, 0.8))
+            layers.append(activation_layer)
+            return layers
+        self.shared = nn.Sequential(*block(h_dim, h_dim), *block(h_dim, h_dim))
 
         self.fc_i = nn.ModuleList(
             [nn.Linear(x_dim + 1, h_dim) for i in range(len(variables))]
@@ -81,10 +81,10 @@ class Generator_causal(nn.Module):
         self.fc_f = nn.ModuleList([nn.Linear(h_dim, var_info['size'])
                             for var, var_info in sorted(variables.items())])
 
-        # for layer in self.shared.parameters():
-        #     if type(layer) == nn.Linear:
-        #         torch.nn.init.xavier_normal_(layer.weight)
-        #         layer.weight.data *= f_scale
+        for layer in self.shared.parameters():
+            if type(layer) == nn.Linear:
+                torch.nn.init.xavier_normal_(layer.weight)
+                layer.weight.data *= f_scale
 
         for i, layer in enumerate(self.fc_i):
             torch.nn.init.xavier_normal_(layer.weight)
@@ -106,7 +106,6 @@ class Generator_causal(nn.Module):
         num_points = x.shape[0]
 
         for i in gen_order:
-            # print('i=',i)
 
             # Select input variables (parents) using mask.
             x_masked = out.clone() * self.M[i, :]
@@ -124,23 +123,20 @@ class Generator_causal(nn.Module):
                         x_p = x_p[random_order]
                         x_masked[:, p_idx] = torch.from_numpy(x_p)
 
-            # print('x_masked=', x_masked)
-
             if self.variables[i]['type'] == 'continuous':
                 out_i = activation_layer(
                     self.fc_i[i](torch.cat([x_masked, z[:, i].unsqueeze(1)], axis=1))
                 )
-                out_i = nn.Tanh()(self.fc_f[i](out_i))
+                out_i = nn.Tanh()(self.fc_f[i](self.shared(out_i)))
                 out[:, self.variables_idxs[i][0]:self.variables_idxs[i][1]] = out_i
 
             else: # type = 'discrete'
                 out_i = activation_layer(
                     self.fc_i[i](torch.cat([x_masked, z[:, i].unsqueeze(1)], axis=1))
                 )
-                out_i = nn.functional.gumbel_softmax(self.fc_f[i](out_i), hard=True)
+                out_i = nn.functional.gumbel_softmax(self.fc_f[i](self.shared(out_i)), hard=True)
                 out[:, self.variables_idxs[i][0]:self.variables_idxs[i][1]] = out_i
 
-        # print('out', out)
         return out
 
 
