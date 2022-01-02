@@ -19,12 +19,12 @@ def gen_door_env_data(N, policy_eps) -> pd.DataFrame:
             s_t = np.random.uniform() - 1
 
         # Sample action.
-        # a_t = np.random.choice([0,1])
+        a_t = np.random.choice([0,1])
 
-        if s_t <= 0.0:
-            a_t = np.random.choice([0,1], p=[0.4,0.6])
-        else:
-            a_t = np.random.choice([0,1], p=[0.9,0.1])
+        # if s_t <= 0.0:
+        #     a_t = np.random.choice([0,1], p=[0.4,0.6])
+        # else:
+        #     a_t = np.random.choice([0,1], p=[0.9,0.1])
 
         # if s_t <= 0.0:
         #     a_t = 1

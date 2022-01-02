@@ -14,8 +14,8 @@ from utils import gen_door_env_data
 from learning import GAN
 from learning.data import DataModule
 
-NUM_RUNS = 5
-NUM_PROCESSORS = 5
+NUM_RUNS = 15
+NUM_PROCESSORS = 2
 DATA_FOLDER_PATH = str(pathlib.Path(__file__).parent.absolute()) + '/exp_data/'
 
 
@@ -65,6 +65,8 @@ def run(args, time_delay):
     data_statistics = calculate_data_statistics(data)
     print('Data:\n', data)
     print(data_statistics)
+
+    return {'exp_name': exp_name, 'data_statistics': data_statistics}
 
     # Causal structure.
     variables = {
@@ -165,7 +167,7 @@ if __name__ == "__main__":
     print('\nExperiment ID (MAIN):', exp_name)
 
     with mp.Pool(processes=NUM_PROCESSORS) as pool:
-        data = pool.starmap(run, [(args, 2*t) for t in range(NUM_RUNS)])
+        data = pool.starmap(run, [(args, 1*t) for t in range(NUM_RUNS)])
         pool.close()
         pool.join()
     print(data)
